@@ -3,10 +3,11 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /auth .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /auth . && mkdir /data
 
 FROM scratch
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=build --chown=65532:65532 /data /data
 COPY --from=build /auth /auth
 USER 65532:65532
 VOLUME /data
