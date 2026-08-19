@@ -1,0 +1,22 @@
+# Coolify: deploy as a Docker Compose resource; set the FQDN to
+# https://auth.gawaak.ovh and it lands in BASE_URL automatically.
+services:
+  auth:
+    build: .
+    environment:
+      - SERVICE_FQDN_AUTH=/
+      - BASE_URL=${SERVICE_FQDN_AUTH}
+      - PORT=8080
+      - DATABASE_PATH=/data/auth.db
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - PAIRWISE_SECRET=${PAIRWISE_SECRET}
+      - ALLOWED_EMAILS=${ALLOWED_EMAILS}
+      - ALLOWED_ORIGIN_SUFFIXES=${ALLOWED_ORIGIN_SUFFIXES:-.gawaak.ovh}
+      - TOKEN_TTL=${TOKEN_TTL:-168h}
+      - TZ=Europe/Paris
+    volumes:
+      - auth-data:/data
+
+volumes:
+  auth-data:

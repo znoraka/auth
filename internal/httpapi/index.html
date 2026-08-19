@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>auth.gawaak.ovh</title>
+<style>
+  body { font: 16px/1.6 system-ui, sans-serif; max-width: 42rem; margin: 4rem auto; padding: 0 1rem; color: #ddd; background: #111; }
+  code, pre { background: #1d1d1d; border-radius: 4px; padding: .1rem .3rem; }
+  pre { padding: .8rem; overflow-x: auto; }
+  a { color: #7ab8ff; }
+</style>
+</head>
+<body>
+<h1>auth</h1>
+<p>Zero-registration Google sign-in broker for <code>*.gawaak.ovh</code>. Your app's origin is its client id — nothing to configure.</p>
+<pre>&lt;script src="https://auth.gawaak.ovh/auth.js"&gt;&lt;/script&gt;
+&lt;a href="#" onclick="auth.startSignIn(); return false"&gt;Login&lt;/a&gt;</pre>
+<p>Verify server-side against <a href="/.well-known/jwks.json"><code>/.well-known/jwks.json</code></a> — issuer is this origin, audience is <code>origin:&lt;your app origin&gt;</code>. Go apps: use <code>github.com/znoraka/auth/verify</code>.</p>
+</body>
+</html>
