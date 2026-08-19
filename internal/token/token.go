@@ -26,15 +26,18 @@ type Signer struct {
 }
 
 type Claims struct {
-	Iss     string `json:"iss"`
-	Sub     string `json:"sub"`
-	Aud     string `json:"aud"`
-	Email   string `json:"email,omitempty"`
-	Name    string `json:"name,omitempty"`
-	Picture string `json:"picture,omitempty"`
-	Nonce   string `json:"nonce,omitempty"`
-	Iat     int64  `json:"iat"`
-	Exp     int64  `json:"exp"`
+	Iss string `json:"iss"`
+	Sub string `json:"sub"`
+	Aud string `json:"aud"`
+	// Email is only ever set when Google reported it verified, so
+	// EmailVerified is simply email != "".
+	Email         string `json:"email,omitempty"`
+	EmailVerified bool   `json:"email_verified,omitempty"`
+	Name          string `json:"name,omitempty"`
+	Picture       string `json:"picture,omitempty"`
+	Nonce         string `json:"nonce,omitempty"`
+	Iat           int64  `json:"iat"`
+	Exp           int64  `json:"exp"`
 }
 
 func GenerateKey() (kid, privPEM string, err error) {
@@ -72,7 +75,7 @@ func (s *Signer) Sign(googleSub, origin, email, name, picture, nonce string, now
 	header, _ := json.Marshal(map[string]string{"alg": "ES256", "typ": "JWT", "kid": s.Kid})
 	claims, _ := json.Marshal(Claims{
 		Iss: s.Iss, Sub: s.PairwiseSub(googleSub, origin), Aud: "origin:" + origin,
-		Email: email, Name: name, Picture: picture, Nonce: nonce,
+		Email: email, EmailVerified: email != "", Name: name, Picture: picture, Nonce: nonce,
 		Iat: now.Unix(), Exp: now.Add(s.TTL).Unix(),
 	})
 	b64 := base64.RawURLEncoding.EncodeToString

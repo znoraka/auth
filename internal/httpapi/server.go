@@ -189,10 +189,11 @@ func (s *Server) redirectBack(w http.ResponseWriter, r *http.Request, req *store
 }
 
 type userinfo struct {
-	Sub     string `json:"sub"`
-	Email   string `json:"email"`
-	Name    string `json:"name"`
-	Picture string `json:"picture"`
+	Sub           string `json:"sub"`
+	Email         string `json:"email"`
+	EmailVerified bool   `json:"email_verified"`
+	Name          string `json:"name"`
+	Picture       string `json:"picture"`
 }
 
 func fetchUserinfo(ctx context.Context, cfg *oauth2.Config, tok *oauth2.Token) (*userinfo, error) {
@@ -210,6 +211,11 @@ func fetchUserinfo(ctx context.Context, cfg *oauth2.Config, tok *oauth2.Token) (
 	}
 	if ui.Sub == "" {
 		return nil, fmt.Errorf("no sub in userinfo")
+	}
+	// An unverified address is one Google will not vouch for; drop it rather
+	// than let downstream apps treat it as an identity hint.
+	if !ui.EmailVerified {
+		ui.Email = ""
 	}
 	return ui, nil
 }

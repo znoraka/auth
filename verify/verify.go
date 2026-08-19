@@ -22,14 +22,15 @@ import (
 )
 
 type Claims struct {
-	Iss     string `json:"iss"`
-	Sub     string `json:"sub"` // ps_… pairwise subject: use as your user id
-	Aud     string `json:"aud"`
-	Email   string `json:"email"`
-	Name    string `json:"name"`
-	Picture string `json:"picture"`
-	Iat     int64  `json:"iat"`
-	Exp     int64  `json:"exp"`
+	Iss           string `json:"iss"`
+	Sub           string `json:"sub"` // ps_… pairwise subject: use as your user id
+	Aud           string `json:"aud"`
+	Email         string `json:"email"`
+	EmailVerified bool   `json:"email_verified"`
+	Name          string `json:"name"`
+	Picture       string `json:"picture"`
+	Iat           int64  `json:"iat"`
+	Exp           int64  `json:"exp"`
 }
 
 type Verifier struct {
