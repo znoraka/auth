@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/base64"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -29,13 +30,19 @@ CREATE TABLE IF NOT EXISTS auth_requests (
 );
 `
 
+// migrations are applied best-effort on open; "duplicate column" errors from
+// re-runs are ignored.
+var migrations = []string{
+	`ALTER TABLE auth_requests ADD COLUMN nonce TEXT NOT NULL DEFAULT ''`,
+}
+
 type Store struct{ DB *sql.DB }
 
 type AuthRequest struct {
-	ID, Code, CodeChallenge, RedirectURI, Origin, ClientState string
-	GoogleSub, Email, Name, Picture                           string
-	ExpiresAt                                                 int64
-	Used                                                      bool
+	ID, Code, CodeChallenge, RedirectURI, Origin, ClientState, Nonce string
+	GoogleSub, Email, Name, Picture                                  string
+	ExpiresAt                                                        int64
+	Used                                                             bool
 }
 
 func Open(path string) (*Store, error) {
@@ -46,6 +53,11 @@ func Open(path string) (*Store, error) {
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(schema); err != nil {
 		return nil, err
+	}
+	for _, m := range migrations {
+		if _, err := db.Exec(m); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			return nil, err
+		}
 	}
 	return &Store{DB: db}, nil
 }
@@ -88,9 +100,9 @@ func (s *Store) AllKeys() (map[string]string, error) {
 
 func (s *Store) CreateRequest(r AuthRequest) error {
 	_, err := s.DB.Exec(`INSERT INTO auth_requests
-	  (id, code_challenge, redirect_uri, origin, client_state, created_at, expires_at)
-	  VALUES (?,?,?,?,?,?,?)`,
-		r.ID, r.CodeChallenge, r.RedirectURI, r.Origin, r.ClientState,
+	  (id, code_challenge, redirect_uri, origin, client_state, nonce, created_at, expires_at)
+	  VALUES (?,?,?,?,?,?,?,?)`,
+		r.ID, r.CodeChallenge, r.RedirectURI, r.Origin, r.ClientState, r.Nonce,
 		time.Now().Unix(), r.ExpiresAt)
 	return err
 }
@@ -98,10 +110,10 @@ func (s *Store) CreateRequest(r AuthRequest) error {
 func (s *Store) GetRequest(id string) (*AuthRequest, error) {
 	r := &AuthRequest{ID: id}
 	var code, gsub, email, name, pic sql.NullString
-	err := s.DB.QueryRow(`SELECT code, code_challenge, redirect_uri, origin, client_state,
+	err := s.DB.QueryRow(`SELECT code, code_challenge, redirect_uri, origin, client_state, nonce,
 	    google_sub, email, name, picture, expires_at, used
 	  FROM auth_requests WHERE id = ?`, id).Scan(
-		&code, &r.CodeChallenge, &r.RedirectURI, &r.Origin, &r.ClientState,
+		&code, &r.CodeChallenge, &r.RedirectURI, &r.Origin, &r.ClientState, &r.Nonce,
 		&gsub, &email, &name, &pic, &r.ExpiresAt, &r.Used)
 	if err != nil {
 		return nil, err

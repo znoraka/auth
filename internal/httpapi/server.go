@@ -63,6 +63,7 @@ func (s *Server) Handler() http.Handler {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Write(authJS)
 	})
+	mux.HandleFunc("GET /.well-known/openid-configuration", cors(s.oidcConfig))
 	mux.HandleFunc("GET /authorize", s.authorize)
 	mux.HandleFunc("GET /callback", s.callback)
 	mux.HandleFunc("POST /token", cors(s.token))
@@ -126,7 +127,7 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request) {
 	}
 	req := store.AuthRequest{
 		ID: store.RandID(), CodeChallenge: challenge,
-		RedirectURI: redirectURI, Origin: origin, ClientState: q.Get("state"),
+		RedirectURI: redirectURI, Origin: origin, ClientState: q.Get("state"), Nonce: q.Get("nonce"),
 		ExpiresAt: time.Now().Add(10 * time.Minute).Unix(),
 	}
 	if err := s.Store.CreateRequest(req); err != nil {
@@ -213,12 +214,47 @@ func fetchUserinfo(ctx context.Context, cfg *oauth2.Config, tok *oauth2.Token) (
 	return ui, nil
 }
 
+// oidcConfig advertises standard OIDC discovery so stock clients (go-oidc,
+// oidc-client-ts, …) can use the broker as an issuer with zero custom code.
+func (s *Server) oidcConfig(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"issuer":                                s.BaseURL,
+		"authorization_endpoint":                s.BaseURL + "/authorize",
+		"token_endpoint":                        s.BaseURL + "/token",
+		"jwks_uri":                              s.BaseURL + "/.well-known/jwks.json",
+		"response_types_supported":              []string{"code"},
+		"grant_types_supported":                 []string{"authorization_code"},
+		"code_challenge_methods_supported":      []string{"S256"},
+		"scopes_supported":                      []string{"openid", "email", "profile"},
+		"subject_types_supported":               []string{"pairwise"},
+		"id_token_signing_alg_values_supported": []string{"ES256"},
+		"token_endpoint_auth_methods_supported": []string{"none"},
+	})
+}
+
+// token accepts both the native JSON body and standard OAuth2
+// application/x-www-form-urlencoded (grant_type=authorization_code).
 func (s *Server) token(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Code         string `json:"code"`
 		CodeVerifier string `json:"code_verifier"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Code == "" || in.CodeVerifier == "" {
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/x-www-form-urlencoded") {
+		if err := r.ParseForm(); err != nil {
+			httpJSONError(w, "bad form", http.StatusBadRequest)
+			return
+		}
+		if g := r.PostForm.Get("grant_type"); g != "" && g != "authorization_code" {
+			httpJSONError(w, "unsupported grant_type", http.StatusBadRequest)
+			return
+		}
+		in.Code, in.CodeVerifier = r.PostForm.Get("code"), r.PostForm.Get("code_verifier")
+	} else if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		httpJSONError(w, "bad request body", http.StatusBadRequest)
+		return
+	}
+	if in.Code == "" || in.CodeVerifier == "" {
 		httpJSONError(w, "code and code_verifier are required", http.StatusBadRequest)
 		return
 	}
@@ -233,7 +269,7 @@ func (s *Server) token(w http.ResponseWriter, r *http.Request) {
 		httpJSONError(w, "PKCE verification failed", http.StatusBadRequest)
 		return
 	}
-	idToken, err := s.Signer.Sign(req.GoogleSub, req.Origin, req.Email, req.Name, req.Picture, time.Now())
+	idToken, err := s.Signer.Sign(req.GoogleSub, req.Origin, req.Email, req.Name, req.Picture, req.Nonce, time.Now())
 	if err != nil {
 		httpJSONError(w, "signing failed", http.StatusInternalServerError)
 		return
@@ -242,6 +278,10 @@ func (s *Server) token(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{
 		"id_token":     idToken,
 		"pairwise_sub": s.Signer.PairwiseSub(req.GoogleSub, req.Origin),
+		// OAuth2 compatibility for stock OIDC clients; the id_token is the
+		// only credential this broker issues.
+		"access_token": idToken,
+		"token_type":   "Bearer",
 	})
 }
 
