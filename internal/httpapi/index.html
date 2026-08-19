@@ -3,19 +3,77 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>auth.gawaak.ovh</title>
+<title>auth · gawaak.ovh</title>
 <style>
-  body { font: 16px/1.6 system-ui, sans-serif; max-width: 42rem; margin: 4rem auto; padding: 0 1rem; color: #ddd; background: #111; }
-  code, pre { background: #1d1d1d; border-radius: 4px; padding: .1rem .3rem; }
-  pre { padding: .8rem; overflow-x: auto; }
-  a { color: #7ab8ff; }
+  :root { --bg: #0d1117; --panel: #161b22; --border: #30363d; --fg: #e6edf3; --dim: #8b949e; --accent: #58a6ff; --ok: #3fb950; }
+  * { box-sizing: border-box; }
+  body { font: 16px/1.65 system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--fg); margin: 0; }
+  main { max-width: 44rem; margin: 0 auto; padding: 4rem 1.25rem 6rem; }
+  h1 { font-size: 2.2rem; margin: 0; letter-spacing: -0.02em; }
+  h1 .dot { color: var(--accent); }
+  .tag { color: var(--dim); margin: .4rem 0 2.5rem; }
+  h2 { font-size: 1.05rem; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin: 2.8rem 0 .8rem; }
+  pre { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; overflow-x: auto; font-size: .88rem; line-height: 1.5; }
+  code { font-family: ui-monospace, monospace; }
+  p code, li code { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: .05rem .35rem; font-size: .85em; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .demo { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 1.4rem; display: flex; align-items: center; gap: 1rem; }
+  .btn { background: var(--accent); color: #0d1117; font-weight: 600; border: 0; border-radius: 6px; padding: .55rem 1.1rem; font-size: .95rem; cursor: pointer; }
+  .btn:hover { filter: brightness(1.1); }
+  .btn.ghost { background: transparent; color: var(--dim); border: 1px solid var(--border); }
+  .who { display: flex; align-items: center; gap: .8rem; min-width: 0; }
+  .who img { width: 40px; height: 40px; border-radius: 50%; }
+  .who .sub { color: var(--dim); font-size: .8rem; font-family: ui-monospace, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 22rem; }
+  .who b { color: var(--ok); }
+  ul { padding-left: 1.2rem; } li { margin: .35rem 0; }
+  .foot { margin-top: 4rem; color: var(--dim); font-size: .85rem; border-top: 1px solid var(--border); padding-top: 1.2rem; }
 </style>
 </head>
 <body>
-<h1>auth</h1>
-<p>Zero-registration Google sign-in broker for <code>*.gawaak.ovh</code>. Your app's origin is its client id — nothing to configure.</p>
-<pre>&lt;script src="https://auth.gawaak.ovh/auth.js"&gt;&lt;/script&gt;
+<main>
+  <h1>auth<span class="dot">.</span>gawaak<span class="dot">.</span>ovh</h1>
+  <p class="tag">Zero-registration Google sign-in for <code>*.gawaak.ovh</code>. Your app's origin is its client id — nothing to configure, ever.</p>
+
+  <div class="demo" id="demo">
+    <button class="btn" id="login">Try it — sign in</button>
+    <span style="color:var(--dim)">Live demo of the exact flow your apps get.</span>
+  </div>
+
+  <h2>Browser — two lines</h2>
+  <pre>&lt;script src="https://auth.gawaak.ovh/auth.js"&gt;&lt;/script&gt;
 &lt;a href="#" onclick="auth.startSignIn(); return false"&gt;Login&lt;/a&gt;</pre>
-<p>Verify server-side against <a href="/.well-known/jwks.json"><code>/.well-known/jwks.json</code></a> — issuer is this origin, audience is <code>origin:&lt;your app origin&gt;</code>. Go apps: use <code>github.com/znoraka/auth/verify</code>.</p>
+  <p><code>auth.ready</code> resolves after the callback; then <code>auth.claims()</code>, <code>auth.token()</code>, <code>auth.signOut()</code>.</p>
+
+  <h2>Go backend — three lines</h2>
+  <pre>v := verify.New("https://auth.gawaak.ovh", baseURL)   // github.com/znoraka/auth/verify
+mux.Handle("/api/", v.Middleware(api))
+claims := verify.FromContext(r.Context())            // claims.Sub, claims.Email</pre>
+
+  <h2>How it works</h2>
+  <ul>
+    <li>OAuth 2.0 + PKCE (S256 only), brokered through one shared Google client.</li>
+    <li>Issues ES256 <code>id_token</code>s — verify with plain <a href="/.well-known/jwks.json">JWKS</a>, no SDK.</li>
+    <li><code>aud</code> is <code>origin:&lt;your app&gt;</code>; <code>sub</code> is a pairwise id, stable per app, uncorrelatable across apps.</li>
+  </ul>
+
+  <p class="foot">Self-hosted, single Go binary · <a href="https://github.com/znoraka/auth">source</a></p>
+</main>
+<script src="/auth.js"></script>
+<script>
+  const demo = document.getElementById("demo");
+  document.getElementById("login").onclick = () => auth.startSignIn();
+  auth.ready.then(() => {
+    const c = auth.claims();
+    if (!c) return;
+    demo.innerHTML = `<div class="who">
+        ${c.picture ? `<img src="${c.picture}" alt="">` : ""}
+        <div><div>Signed in as <b></b></div><div class="sub"></div></div>
+      </div><button class="btn ghost" id="out">Sign out</button>`;
+    demo.querySelector("b").textContent = c.name || c.email;
+    demo.querySelector(".sub").textContent = c.sub;
+    demo.querySelector("#out").onclick = () => { auth.signOut(); location.reload(); };
+  });
+</script>
 </body>
 </html>
